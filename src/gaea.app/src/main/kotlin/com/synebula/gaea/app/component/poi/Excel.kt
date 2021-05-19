@@ -8,6 +8,8 @@ import org.apache.poi.ss.usermodel.BorderStyle
 import org.apache.poi.ss.usermodel.HorizontalAlignment
 import org.apache.poi.ss.usermodel.Sheet
 import org.apache.poi.ss.usermodel.VerticalAlignment
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import org.springframework.web.multipart.MultipartFile
 import java.lang.Exception
 import java.lang.RuntimeException
 
@@ -79,6 +81,51 @@ object Excel {
             }
         }
         writeTo(wb)
+    }
+
+    /**
+     * 导入文件
+     *
+     * @param file 上传文件流
+     * @param columnSize 文件列数
+     * @param startRow 数据起始行，默认0
+     * @param startColumn 数据起始列，默认0
+     *
+     * @return ExcelData
+     */
+    fun import(file: MultipartFile, columnSize: Int, startRow: Int = 0, startColumn: Int = 0): ExcelData {
+        if (file.originalFilename?.endsWith(".xls") != true && file.originalFilename?.endsWith(".xlsx") != true)
+            throw RuntimeException("无法识别的文件格式[${file.originalFilename}]")
+
+        val workbook = if (file.originalFilename?.endsWith(".xls") == true)
+            HSSFWorkbook(file.inputStream)
+        else
+            XSSFWorkbook(file.inputStream)
+        val data = ExcelData()
+        val sheet = workbook.getSheetAt(0)
+        val title = mutableListOf<String>()
+        for (i in startColumn until columnSize) {
+            title.add(sheet.getRow(startRow).getCell(i).stringCellValue)
+        }
+        data.columnNames = title
+
+        val fullData = mutableListOf<List<String>>()
+        for (i in (startRow + 1)..sheet.lastRowNum) {
+            val row = sheet.getRow(i) ?: continue
+            val rowData = mutableListOf<String>()
+            for (c in startColumn until columnSize) {
+                try {
+                    rowData.add(row.getCell(c).stringCellValue)
+                } catch (ex: Exception) {
+                    throw RuntimeException("解析EXCEL文件${file.originalFilename}第${i}行第${c}列出错", ex)
+                }
+            }
+            fullData.add(rowData)
+        }
+        data.data = fullData
+        workbook.close()
+        file.inputStream.close()
+        return data
     }
 
     /**
